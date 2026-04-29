@@ -24,6 +24,7 @@ import {getDateForDateLine, preparePostList} from '@utils/post_list';
 
 import {INITIAL_BATCH_TO_RENDER, SCROLL_POSITION_CONFIG, VIEWABILITY_CONFIG} from './config';
 import MoreMessages from './more_messages';
+import {PostListScrollProvider} from './post_list_scroll_context';
 import ScrollToEndView from './scroll_to_end_view';
 
 import type {PostListItem, PostListOtherItem, ViewableItemsChanged, ViewableItemsChangedListenerEvent} from '@typings/components/post_list';
@@ -128,7 +129,47 @@ const PostList = ({
         isKeyboardFullyClosed,
         inputAccessoryViewAnimatedHeight,
         isInputAccessoryViewMode,
+        scrollPosition,
     } = useKeyboardAnimationContext();
+
+    // compensateScroll is called by show-more expanders on each animation frame
+    // (via useShowMoreScrollCompensation) with the incremental pixel delta by
+    // which the post's clamped height changed that frame.  We adjust the
+    // FlatList's contentOffset by -delta so the content under the user's eye
+    // stays locked in place throughout the 300 ms withTiming animation.
+    //
+    // Direction: inverted FlatList, contentOffset.y = 0 at visual bottom.
+    // Row expansion pushes the viewport toward older content (offset increases).
+    // To cancel: decrease offset by delta.  Collapsing produces a negative delta
+    // (the row is shrinking), so subtracting a negative value increases the
+    // offset, which is correct -- it cancels the visual shift toward newer content
+    // that collapsing would otherwise cause.
+    //
+    // We track a compensatedOffset ref ourselves rather than re-reading
+    // scrollPosition.value on every frame.  This sidesteps a staleness hazard:
+    // the scroll event throttle (60ms on iOS) means scrollPosition can lag behind
+    // multiple frames during a 300ms animation.  Instead we seed compensatedOffset
+    // once from scrollPosition at the first call of a new animation burst, then
+    // delta-accumulate from there.  The ref is reset to -1 (sentinel) on every
+    // momentum scroll end so the next burst seeds from the fresh native position.
+    // scrollToOffset({animated:false}) does NOT fire onMomentumScrollEnd, so
+    // there is no feedback loop.
+    const compensatedOffset = useRef<number>(-1);
+    const compensateScroll = useCallback((delta: number) => {
+        if (!listRef?.current) {
+            return;
+        }
+
+        // Seed from scrollPosition on the first call of a new animation burst.
+        // scrollPosition.value includes bottomInset; subtract it to get raw
+        // contentOffset.y for scrollToOffset.
+        if (compensatedOffset.current < 0) {
+            compensatedOffset.current = Math.max(0, scrollPosition.value - contentInset.value);
+        }
+
+        compensatedOffset.current = Math.max(0, compensatedOffset.current - delta);
+        listRef.current.scrollToOffset({offset: compensatedOffset.current, animated: false});
+    }, [listRef, scrollPosition, contentInset]);
 
     const onScrollEndIndexListener = useRef<onScrollEndIndexListenerEvent>();
     const onViewableItemsChangedListener = useRef<ViewableItemsChangedListenerEvent>();
@@ -258,7 +299,13 @@ const PostList = ({
         if (!y && lastPostId !== firstIdInPosts) {
             setLastPostId(firstIdInPosts);
         }
-    }, [firstIdInPosts, lastPostId, showScrollToEndBtn]);
+
+        // Reset compensatedOffset so the next show-more animation burst re-seeds
+        // from the fresh scroll position (see compensateScroll above).
+        // This fires on momentum scroll end only -- scrollToOffset({animated:false})
+        // does not trigger onMomentumScrollEnd, so there is no feedback loop.
+        compensatedOffset.current = -1;
+    }, [firstIdInPosts, lastPostId, showScrollToEndBtn]); // compensatedOffset is a ref -- stable, not a dep
 
     const onScrollToIndexFailed = useCallback((info: ScrollIndexFailed) => {
         const index = Math.min(info.highestMeasuredFrameIndex, info.index);
@@ -441,7 +488,7 @@ const PostList = ({
     );
 
     return (
-        <>
+        <PostListScrollProvider value={{compensateScroll}}>
             <Animated.FlatList
                 animatedProps={animatedProps}
                 automaticallyAdjustContentInsets={false}
@@ -499,7 +546,7 @@ const PostList = ({
                 testID={`${testID}.more_messages_button`}
             />
             }
-        </>
+        </PostListScrollProvider>
     );
 };
 

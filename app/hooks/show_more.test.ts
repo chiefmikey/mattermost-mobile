@@ -6,50 +6,52 @@ import {withTiming} from 'react-native-reanimated';
 
 import {useShowMoreAnimatedStyle} from './show_more';
 
-jest.mock('react-native-reanimated', () => ({
-    useAnimatedStyle: (callback: () => any) => callback(),
-    withTiming: jest.fn((value) => value),
-}));
+jest.mock('react-native-reanimated', () => {
+    return {
+        useSharedValue: (initial: any) => ({value: initial}),
+        useAnimatedStyle: (worklet: () => any) => worklet(),
+        useAnimatedReaction: jest.fn(),
+        runOnJS: (fn: (...args: any[]) => any) => fn,
+        withTiming: jest.fn((value) => value),
+    };
+});
 
 describe('useShowMoreAnimatedStyle', () => {
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
-    it('returns maxHeight when height is undefined', () => {
+    it('returns an animatedStyle and animatedHeight SharedValue', () => {
         const maxHeight = 100;
         const {result} = renderHook(() =>
             useShowMoreAnimatedStyle(undefined, maxHeight, false),
         );
 
-        expect(result.current).toEqual({
-            maxHeight,
-        });
+        expect(result.current.animatedStyle).toBeDefined();
+        expect(result.current.animatedHeight).toBeDefined();
+        expect(result.current.animatedHeight.value).toBe(maxHeight);
     });
 
-    it('animates to maxHeight when not open', () => {
+    it('calls withTiming(maxHeight) when not open and content is taller than cap', () => {
         const height = 200;
         const maxHeight = 100;
-        const {result} = renderHook(() =>
-            useShowMoreAnimatedStyle(height, maxHeight, false),
-        );
+        renderHook(() => useShowMoreAnimatedStyle(height, maxHeight, false));
 
-        expect(result.current).toEqual({
-            maxHeight,
-        });
         expect(withTiming).toHaveBeenCalledWith(maxHeight, {duration: 300});
     });
 
-    it('animates to full height when open', () => {
+    it('calls withTiming(height) when open and content is taller than cap', () => {
         const height = 200;
         const maxHeight = 100;
-        const {result} = renderHook(() =>
-            useShowMoreAnimatedStyle(height, maxHeight, true),
-        );
+        renderHook(() => useShowMoreAnimatedStyle(height, maxHeight, true));
 
-        expect(result.current).toEqual({
-            maxHeight: height,
-        });
         expect(withTiming).toHaveBeenCalledWith(height, {duration: 300});
+    });
+
+    it('does not call withTiming when height is undefined', () => {
+        const maxHeight = 100;
+        renderHook(() => useShowMoreAnimatedStyle(undefined, maxHeight, false));
+
+        expect(withTiming).not.toHaveBeenCalled();
     });
 });

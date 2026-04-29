@@ -8,8 +8,9 @@ import Animated from 'react-native-reanimated';
 
 import Markdown from '@components/markdown';
 import {isChannelMentions} from '@components/markdown/channel_mention/channel_mention';
+import {usePostListScrollContext} from '@components/post_list/post_list_scroll_context';
 import {SEARCH} from '@constants/screens';
-import {useShowMoreAnimatedStyle} from '@hooks/show_more';
+import {useShowMoreAnimatedStyle, useShowMoreScrollCompensation} from '@hooks/show_more';
 import {getPostTranslatedMessage, getPostTranslation} from '@utils/post';
 import {makeStyleSheetFromTheme} from '@utils/theme';
 import {typography} from '@utils/typography';
@@ -77,9 +78,17 @@ const Message = ({
     const [height, setHeight] = useState<number|undefined>();
     const dimensions = useWindowDimensions();
     const maxHeight = Math.round((dimensions.height * 0.5) + SHOW_MORE_HEIGHT);
-    const animatedStyle = useShowMoreAnimatedStyle(height, maxHeight, open);
+    const {animatedStyle, animatedHeight} = useShowMoreAnimatedStyle(height, maxHeight, open);
     const style = getStyleSheet(theme);
     const intl = useIntl();
+
+    const {compensateScroll} = usePostListScrollContext();
+
+    // Wire up frame-synced scroll compensation. Each animation frame where the
+    // clamped height changes, useShowMoreScrollCompensation calls compensateScroll
+    // with the incremental delta so the FlatList adjusts contentOffset in lockstep
+    // with the animation -- no drift during the 300 ms withTiming, no snap at the end.
+    useShowMoreScrollCompensation(animatedHeight, compensateScroll);
 
     // We need to memoize these two values because they are actually getters that return a new list
     // on every render. We need to trust that changes in the currentUser will trigger the recalculation.

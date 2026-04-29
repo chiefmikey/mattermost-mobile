@@ -7,7 +7,8 @@ import Animated from 'react-native-reanimated';
 
 import Markdown from '@components/markdown';
 import ShowMoreButton from '@components/post_list/post/body/message/show_more_button';
-import {useShowMoreAnimatedStyle} from '@hooks/show_more';
+import {usePostListScrollContext} from '@components/post_list/post_list_scroll_context';
+import {useShowMoreAnimatedStyle, useShowMoreScrollCompensation} from '@hooks/show_more';
 import {makeStyleSheetFromTheme} from '@utils/theme';
 
 import type {AvailableScreens} from '@typings/screens/navigation';
@@ -34,8 +35,11 @@ const EmbedText = ({channelId, location, theme, value}: Props) => {
     const [height, setHeight] = useState<number|undefined>();
     const dimensions = useWindowDimensions();
     const maxHeight = Math.round((dimensions.height * 0.4) + SHOW_MORE_HEIGHT);
-    const animatedStyle = useShowMoreAnimatedStyle(height, maxHeight, open);
+    const {animatedStyle, animatedHeight} = useShowMoreAnimatedStyle(height, maxHeight, open);
     const style = getStyles(theme);
+
+    const {compensateScroll} = usePostListScrollContext();
+    useShowMoreScrollCompensation(animatedHeight, compensateScroll);
 
     const onLayout = useCallback((event: LayoutChangeEvent) => setHeight(event.nativeEvent.layout.height), []);
     const onPress = () => setOpen(!open);
