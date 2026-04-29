@@ -1,7 +1,7 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {createContext, useContext} from 'react';
+import {createContext, useContext} from 'react';
 
 /**
  * Context that exposes a scroll-compensation callback to show-more expanders
@@ -17,7 +17,7 @@ interface PostListScrollContextType {
     compensateScroll: (delta: number) => void;
 }
 
-const noop = (_delta: number) => {/* no-op until provider mounts */};
+const noop = () => {/* no-op until provider mounts */};
 
 const PostListScrollContext = createContext<PostListScrollContextType>({
     compensateScroll: noop,
